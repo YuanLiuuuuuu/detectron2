@@ -8,8 +8,10 @@ dataloader = model_zoo.get_config("common/data/coco.py").dataloader
 dataloader.train.mapper.augmentations = [
     L(T.RandomFlip)(horizontal=True),  # flip first
     L(T.ResizeScale)(
-        min_scale=0.1, max_scale=2.0, target_height=image_size, target_width=image_size
-    ),
+        min_scale=0.1,
+        max_scale=2.0,
+        target_height=image_size,
+        target_width=image_size),
     L(T.FixedSizeCrop)(crop_size=(image_size, image_size), pad=False),
 ]
 dataloader.train.mapper.image_format = "RGB"

@@ -3,7 +3,7 @@ output
 instant_test_output
 inference_test_output
 
-
+work_dir*
 *.png
 *.json
 *.diff

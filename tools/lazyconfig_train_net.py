@@ -28,15 +28,15 @@ from detectron2.engine import (
 from detectron2.engine.defaults import create_ddp_model
 from detectron2.evaluation import inference_on_dataset, print_csv_format
 from detectron2.utils import comm
+from utils import setup_multi_processes, init_distributed_mode
 
 logger = logging.getLogger("detectron2")
 
 
 def do_test(cfg, model):
     if "evaluator" in cfg.dataloader:
-        ret = inference_on_dataset(
-            model, instantiate(cfg.dataloader.test), instantiate(cfg.dataloader.evaluator)
-        )
+        ret = inference_on_dataset(model, instantiate(cfg.dataloader.test),
+                                   instantiate(cfg.dataloader.evaluator))
         print_csv_format(ret)
         return ret
 
@@ -71,28 +71,24 @@ def do_train(args, cfg):
     train_loader = instantiate(cfg.dataloader.train)
 
     model = create_ddp_model(model, **cfg.train.ddp)
-    trainer = (AMPTrainer if cfg.train.amp.enabled else SimpleTrainer)(model, train_loader, optim)
+    trainer = (AMPTrainer if cfg.train.amp.enabled else SimpleTrainer)(
+        model, train_loader, optim)
     checkpointer = DetectionCheckpointer(
         model,
         cfg.train.output_dir,
         trainer=trainer,
     )
-    trainer.register_hooks(
-        [
-            hooks.IterationTimer(),
-            hooks.LRScheduler(scheduler=instantiate(cfg.lr_multiplier)),
-            hooks.PeriodicCheckpointer(checkpointer, **cfg.train.checkpointer)
-            if comm.is_main_process()
-            else None,
-            hooks.EvalHook(cfg.train.eval_period, lambda: do_test(cfg, model)),
-            hooks.PeriodicWriter(
-                default_writers(cfg.train.output_dir, cfg.train.max_iter),
-                period=cfg.train.log_period,
-            )
-            if comm.is_main_process()
-            else None,
-        ]
-    )
+    trainer.register_hooks([
+        hooks.IterationTimer(),
+        hooks.LRScheduler(scheduler=instantiate(cfg.lr_multiplier)),
+        hooks.PeriodicCheckpointer(checkpointer, **cfg.train.checkpointer)
+        if comm.is_main_process() else None,
+        hooks.EvalHook(cfg.train.eval_period, lambda: do_test(cfg, model)),
+        hooks.PeriodicWriter(
+            default_writers(cfg.train.output_dir, cfg.train.max_iter),
+            period=cfg.train.log_period,
+        ) if comm.is_main_process() else None,
+    ])
 
     checkpointer.resume_or_load(cfg.train.init_checkpoint, resume=args.resume)
     if args.resume and checkpointer.has_checkpoint():
@@ -121,11 +117,13 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
+    init_distributed_mode()
+    setup_multi_processes(args)
     launch(
         main,
         args.num_gpus,
         num_machines=args.num_machines,
         machine_rank=args.machine_rank,
         dist_url=args.dist_url,
-        args=(args,),
+        args=(args, ),
     )

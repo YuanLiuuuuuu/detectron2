@@ -1,8 +1,8 @@
 import inspect
 from typing import Union
 import torch
-from torch.fx._symbolic_trace import _orig_module_call
-from torch.fx._symbolic_trace import is_fx_tracing as is_fx_tracing_current
+# from torch.fx._symbolic_trace import _orig_module_call
+# from torch.fx._symbolic_trace import is_fx_tracing as is_fx_tracing_current
 
 from detectron2.utils.env import TORCH_VERSION
 
@@ -40,12 +40,11 @@ def assert_fx_safe(condition: Union[bool, str], message: str):
             if isinstance(condition, str):
                 caller_frame = inspect.currentframe().f_back
                 torch._assert(
-                    eval(condition, caller_frame.f_globals, caller_frame.f_locals), message
-                )
+                    eval(condition, caller_frame.f_globals,
+                         caller_frame.f_locals), message)
             else:
                 torch._assert(condition, message)
         except torch.fx.proxy.TraceError as e:
             print(
                 "Found a non-FX compatible assertion. Skipping the check. Failure is shown below"
-                + str(e)
-            )
+                + str(e))

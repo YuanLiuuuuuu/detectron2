@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Facebook, Inc. and its affiliates.
-
 """
 This file contains components with some default boilerplate logic user may need
 in training / testing. They will not work for everyone, but many users may find them useful.
@@ -70,7 +69,8 @@ def create_ddp_model(model, *, fp16_compression=False, **kwargs):
     if comm.get_world_size() == 1:
         return model
     if "device_ids" not in kwargs:
-        kwargs["device_ids"] = [comm.get_local_rank()]
+        # kwargs["device_ids"] = [comm.get_local_rank()]
+        kwargs["device_ids"] = [int(os.environ['LOCAL_RANK'])]
     ddp = DistributedDataParallel(model, **kwargs)
     if fp16_compression:
         from torch.distributed.algorithms.ddp_comm_hooks import default as comm_hooks
@@ -90,8 +90,7 @@ def default_argument_parser(epilog=None):
         argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
-        epilog=epilog
-        or f"""
+        epilog=epilog or f"""
 Examples:
 
 Run on single machine:
@@ -106,24 +105,34 @@ Run on multiple machines:
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
+    parser.add_argument(
+        "--config-file",
+        default="",
+        metavar="FILE",
+        help="path to config file")
     parser.add_argument(
         "--resume",
         action="store_true",
         help="Whether to attempt to resume from the checkpoint directory. "
         "See documentation of `DefaultTrainer.resume_or_load()` for what it means.",
     )
-    parser.add_argument("--eval-only", action="store_true", help="perform evaluation only")
-    parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
-    parser.add_argument("--num-machines", type=int, default=1, help="total number of machines")
     parser.add_argument(
-        "--machine-rank", type=int, default=0, help="the rank of this machine (unique per machine)"
-    )
+        "--eval-only", action="store_true", help="perform evaluation only")
+    parser.add_argument(
+        "--num-gpus", type=int, default=1, help="number of gpus *per machine*")
+    parser.add_argument(
+        "--num-machines", type=int, default=1, help="total number of machines")
+    parser.add_argument(
+        "--machine-rank",
+        type=int,
+        default=0,
+        help="the rank of this machine (unique per machine)")
 
     # PyTorch still may leave orphan processes in multi-gpu training.
     # Therefore we use a deterministic way to obtain port,
     # so that users are aware of orphan processes by seeing the port occupied.
-    port = 2**15 + 2**14 + hash(os.getuid() if sys.platform != "win32" else 1) % 2**14
+    port = 2**15 + 2**14 + hash(
+        os.getuid() if sys.platform != "win32" else 1) % 2**14
     parser.add_argument(
         "--dist-url",
         default="tcp://127.0.0.1:{}".format(port),
@@ -167,7 +176,8 @@ def _highlight(code, filename):
     from pygments.formatters import Terminal256Formatter
 
     lexer = Python3Lexer() if filename.endswith(".py") else YamlLexer()
-    code = pygments.highlight(code, lexer, Terminal256Formatter(style="monokai"))
+    code = pygments.highlight(code, lexer,
+                              Terminal256Formatter(style="monokai"))
     return code
 
 
@@ -183,7 +193,8 @@ def default_setup(cfg, args):
         cfg (CfgNode or omegaconf.DictConfig): the full config to be used
         args (argparse.NameSpace): the command line arguments to be logged
     """
-    output_dir = _try_get_key(cfg, "OUTPUT_DIR", "output_dir", "train.output_dir")
+    output_dir = _try_get_key(cfg, "OUTPUT_DIR", "output_dir",
+                              "train.output_dir")
     if comm.is_main_process() and output_dir:
         PathManager.mkdirs(output_dir)
 
@@ -191,24 +202,26 @@ def default_setup(cfg, args):
     setup_logger(output_dir, distributed_rank=rank, name="fvcore")
     logger = setup_logger(output_dir, distributed_rank=rank)
 
-    logger.info("Rank of current process: {}. World size: {}".format(rank, comm.get_world_size()))
+    logger.info("Rank of current process: {}. World size: {}".format(
+        rank, comm.get_world_size()))
     logger.info("Environment info:\n" + collect_env_info())
 
     logger.info("Command line arguments: " + str(args))
     if hasattr(args, "config_file") and args.config_file != "":
-        logger.info(
-            "Contents of args.config_file={}:\n{}".format(
-                args.config_file,
-                _highlight(PathManager.open(args.config_file, "r").read(), args.config_file),
-            )
-        )
+        logger.info("Contents of args.config_file={}:\n{}".format(
+            args.config_file,
+            _highlight(
+                PathManager.open(args.config_file, "r").read(),
+                args.config_file),
+        ))
 
     if comm.is_main_process() and output_dir:
         # Note: some of our scripts may expect the existence of
         # config.yaml in output directory
         path = os.path.join(output_dir, "config.yaml")
         if isinstance(cfg, CfgNode):
-            logger.info("Running with full config:\n{}".format(_highlight(cfg.dump(), ".yaml")))
+            logger.info("Running with full config:\n{}".format(
+                _highlight(cfg.dump(), ".yaml")))
             with PathManager.open(path, "w") as f:
                 f.write(cfg.dump())
         else:
@@ -223,8 +236,7 @@ def default_setup(cfg, args):
     # typical validation set.
     if not (hasattr(args, "eval_only") and args.eval_only):
         torch.backends.cudnn.benchmark = _try_get_key(
-            cfg, "CUDNN_BENCHMARK", "train.cudnn_benchmark", default=False
-        )
+            cfg, "CUDNN_BENCHMARK", "train.cudnn_benchmark", default=False)
 
 
 def default_writers(output_dir: str, max_iter: Optional[int] = None):
@@ -288,8 +300,8 @@ class DefaultPredictor:
         checkpointer.load(cfg.MODEL.WEIGHTS)
 
         self.aug = T.ResizeShortestEdge(
-            [cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST], cfg.INPUT.MAX_SIZE_TEST
-        )
+            [cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST],
+            cfg.INPUT.MAX_SIZE_TEST)
 
         self.input_format = cfg.INPUT.FORMAT
         assert self.input_format in ["RGB", "BGR"], self.input_format
@@ -304,13 +316,15 @@ class DefaultPredictor:
                 the output of the model for one image only.
                 See :doc:`/tutorials/models` for details about the format.
         """
-        with torch.no_grad():  # https://github.com/sphinx-doc/sphinx/issues/4258
+        with torch.no_grad(
+        ):  # https://github.com/sphinx-doc/sphinx/issues/4258
             # Apply pre-processing to image.
             if self.input_format == "RGB":
                 # whether the model expects BGR inputs or RGB
                 original_image = original_image[:, :, ::-1]
             height, width = original_image.shape[:2]
-            image = self.aug.get_transform(original_image).apply_image(original_image)
+            image = self.aug.get_transform(original_image).apply_image(
+                original_image)
             image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
 
             inputs = {"image": image, "height": height, "width": width}
@@ -368,7 +382,8 @@ class DefaultTrainer(TrainerBase):
         """
         super().__init__()
         logger = logging.getLogger("detectron2")
-        if not logger.isEnabledFor(logging.INFO):  # setup_logger is not called for d2
+        if not logger.isEnabledFor(
+                logging.INFO):  # setup_logger is not called for d2
             setup_logger()
         cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
 
@@ -378,9 +393,8 @@ class DefaultTrainer(TrainerBase):
         data_loader = self.build_train_loader(cfg)
 
         model = create_ddp_model(model, broadcast_buffers=False)
-        self._trainer = (AMPTrainer if cfg.SOLVER.AMP.ENABLED else SimpleTrainer)(
-            model, data_loader, optimizer
-        )
+        self._trainer = (AMPTrainer if cfg.SOLVER.AMP.ENABLED else
+                         SimpleTrainer)(model, data_loader, optimizer)
 
         self.scheduler = self.build_lr_scheduler(cfg, optimizer)
         self.checkpointer = DetectionCheckpointer(
@@ -437,8 +451,7 @@ class DefaultTrainer(TrainerBase):
                 # Build a new data loader to not affect training
                 self.build_train_loader(cfg),
                 cfg.TEST.PRECISE_BN.NUM_ITER,
-            )
-            if cfg.TEST.PRECISE_BN.ENABLED and get_bn_modules(self.model)
+            ) if cfg.TEST.PRECISE_BN.ENABLED and get_bn_modules(self.model)
             else None,
         ]
 
@@ -447,7 +460,9 @@ class DefaultTrainer(TrainerBase):
         # This is not always the best: if checkpointing has a different frequency,
         # some checkpoints may have more precise statistics than others.
         if comm.is_main_process():
-            ret.append(hooks.PeriodicCheckpointer(self.checkpointer, cfg.SOLVER.CHECKPOINT_PERIOD))
+            ret.append(
+                hooks.PeriodicCheckpointer(self.checkpointer,
+                                           cfg.SOLVER.CHECKPOINT_PERIOD))
 
         def test_and_save_results():
             self._last_eval_results = self.test(self.cfg, self.model)
@@ -483,9 +498,8 @@ class DefaultTrainer(TrainerBase):
         """
         super().train(self.start_iter, self.max_iter)
         if len(self.cfg.TEST.EXPECTED_RESULTS) and comm.is_main_process():
-            assert hasattr(
-                self, "_last_eval_results"
-            ), "No evaluation results obtained during training!"
+            assert hasattr(self, "_last_eval_results"
+                           ), "No evaluation results obtained during training!"
             verify_results(self.cfg, self._last_eval_results)
             return self._last_eval_results
 
@@ -565,13 +579,11 @@ class DefaultTrainer(TrainerBase):
 
         It is not implemented by default.
         """
-        raise NotImplementedError(
-            """
+        raise NotImplementedError("""
 If you want DefaultTrainer to automatically run evaluation,
 please implement `build_evaluator()` in subclasses (see train_net.py for example).
 Alternatively, you can call evaluation functions yourself (see Colab balloon tutorial for example).
-"""
-        )
+""")
 
     @classmethod
     def test(cls, cfg, model, evaluators=None):
@@ -593,9 +605,9 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
         if isinstance(evaluators, DatasetEvaluator):
             evaluators = [evaluators]
         if evaluators is not None:
-            assert len(cfg.DATASETS.TEST) == len(evaluators), "{} != {}".format(
-                len(cfg.DATASETS.TEST), len(evaluators)
-            )
+            assert len(
+                cfg.DATASETS.TEST) == len(evaluators), "{} != {}".format(
+                    len(cfg.DATASETS.TEST), len(evaluators))
 
         results = OrderedDict()
         for idx, dataset_name in enumerate(cfg.DATASETS.TEST):
@@ -610,8 +622,7 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
                 except NotImplementedError:
                     logger.warn(
                         "No evaluator found. Use `DefaultTrainer.test(evaluators=)`, "
-                        "or implement its `build_evaluator` method."
-                    )
+                        "or implement its `build_evaluator` method.")
                     results[dataset_name] = {}
                     continue
             results_i = inference_on_dataset(model, data_loader, evaluator)
@@ -620,9 +631,9 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
                 assert isinstance(
                     results_i, dict
                 ), "Evaluator must return a dict on the main process. Got {} instead.".format(
-                    results_i
-                )
-                logger.info("Evaluation results for {} in csv format:".format(dataset_name))
+                    results_i)
+                logger.info("Evaluation results for {} in csv format:".format(
+                    dataset_name))
                 print_csv_format(results_i)
 
         if len(results) == 1:
@@ -678,23 +689,26 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
         frozen = cfg.is_frozen()
         cfg.defrost()
 
-        assert (
-            cfg.SOLVER.IMS_PER_BATCH % old_world_size == 0
-        ), "Invalid REFERENCE_WORLD_SIZE in config!"
+        assert (cfg.SOLVER.IMS_PER_BATCH %
+                old_world_size == 0), "Invalid REFERENCE_WORLD_SIZE in config!"
         scale = num_workers / old_world_size
-        bs = cfg.SOLVER.IMS_PER_BATCH = int(round(cfg.SOLVER.IMS_PER_BATCH * scale))
+        bs = cfg.SOLVER.IMS_PER_BATCH = int(
+            round(cfg.SOLVER.IMS_PER_BATCH * scale))
         lr = cfg.SOLVER.BASE_LR = cfg.SOLVER.BASE_LR * scale
-        max_iter = cfg.SOLVER.MAX_ITER = int(round(cfg.SOLVER.MAX_ITER / scale))
-        warmup_iter = cfg.SOLVER.WARMUP_ITERS = int(round(cfg.SOLVER.WARMUP_ITERS / scale))
-        cfg.SOLVER.STEPS = tuple(int(round(s / scale)) for s in cfg.SOLVER.STEPS)
+        max_iter = cfg.SOLVER.MAX_ITER = int(
+            round(cfg.SOLVER.MAX_ITER / scale))
+        warmup_iter = cfg.SOLVER.WARMUP_ITERS = int(
+            round(cfg.SOLVER.WARMUP_ITERS / scale))
+        cfg.SOLVER.STEPS = tuple(
+            int(round(s / scale)) for s in cfg.SOLVER.STEPS)
         cfg.TEST.EVAL_PERIOD = int(round(cfg.TEST.EVAL_PERIOD / scale))
-        cfg.SOLVER.CHECKPOINT_PERIOD = int(round(cfg.SOLVER.CHECKPOINT_PERIOD / scale))
+        cfg.SOLVER.CHECKPOINT_PERIOD = int(
+            round(cfg.SOLVER.CHECKPOINT_PERIOD / scale))
         cfg.SOLVER.REFERENCE_WORLD_SIZE = num_workers  # maintain invariant
         logger = logging.getLogger(__name__)
         logger.info(
             f"Auto-scaling the config to batch_size={bs}, learning_rate={lr}, "
-            f"max_iter={max_iter}, warmup={warmup_iter}."
-        )
+            f"max_iter={max_iter}, warmup={warmup_iter}.")
 
         if frozen:
             cfg.freeze()
