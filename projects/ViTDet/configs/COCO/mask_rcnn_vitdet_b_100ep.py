@@ -14,12 +14,13 @@ model = model_zoo.get_config("common/models/mask_rcnn_vitdet.py").model
 train = model_zoo.get_config("common/train.py").train
 train.amp.enabled = True
 train.ddp.fp16_compression = True
-train.init_checkpoint = "/mnt/cache/liuyuan/research/mae/pretrain_s2/mae_retrain/checkpoint-299.pth"
-train.output_dir = "work_dir/mae_det/mae_300e"
+train.init_checkpoint = "/mnt/cache/liuyuan/research/mae/pretrain_s2/mae_only_low_r40_src_single_1600e/checkpoint-1599_.pth"
+train.output_dir = "work_dir/mae_det/mae_jitter_gray_target_300e"
 
 # Schedule
 # 100 ep = 184375 iters * 64 images/iter / 118000 images/ep
 train.max_iter = 184375
+train.checkpointer.max_to_keep = 1
 
 lr_multiplier = L(WarmupParamScheduler)(
     scheduler=L(MultiStepParamScheduler)(
@@ -50,5 +51,5 @@ file_client_args = dict(
 dataloader.train.mapper.file_client_args = file_client_args
 dataloader.test.mapper.file_client_args = file_client_args
 
-dataloader.train.num_workers = 8
-dataloader.test.num_workers = 8
+dataloader.train.num_workers = 16
+dataloader.test.num_workers = 16
