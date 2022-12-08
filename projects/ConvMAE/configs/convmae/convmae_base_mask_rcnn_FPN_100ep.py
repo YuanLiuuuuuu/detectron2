@@ -162,7 +162,7 @@ train = dict(
         fp16_compression=True,
     ),
     checkpointer=dict(period=3688,
-                      max_to_keep=100),  # options for PeriodicCheckpointer
+                      max_to_keep=3),  # options for PeriodicCheckpointer
     eval_period=3688,
     log_period=20,
     device="cuda"
